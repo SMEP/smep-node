@@ -29,9 +29,9 @@ static void Init_UART_PinMux(void)
 
 
 bool ADC_Done() {
-	uint32_t rawSample = Chip_ADC_GetDataReg(LPC_ADC, ADC_SEQA_IDX );
+	uint32_t rawSample = Chip_ADC_GetDataReg(LPC_ADC, 0 );
 
-	return (bool) ((rawSample & ADC_SEQ_GDAT_DATAVALID) != 0); // Data valid flag;
+	return (bool) ADC_DR_DONE(rawSample); // Data valid flag;
 }
 
 int main(void) {
@@ -48,7 +48,7 @@ int main(void) {
     Init_UART_PinMux();
 
     Chip_UART0_Init( LPC_UART );
-    Chip_UART0_SetBaud( LPC_UART, 9600 );
+    Chip_UART0_SetBaud( LPC_UART, 115200 );
     Chip_UART0_TXEnable( LPC_UART );
 
     Board_UARTPutSTR( "HelloWorld! \n");
@@ -56,19 +56,24 @@ int main(void) {
 
     Chip_ADC_Init( LPC_ADC, 0 );
 
+
+    Chip_ADC_SetClockRate( LPC_ADC, ADC_MAX_SAMPLE_RATE / 100 ); // Calibrarion requires around 500kHz
     Chip_ADC_StartCalibration( LPC_ADC );
 
-
     while( ! (Chip_ADC_IsCalibrationDone( LPC_ADC )) ) {}
+
+    Chip_ADC_SetClockRate( LPC_ADC, ADC_MAX_SAMPLE_RATE );
+
 
 
 	Chip_IOCON_PinMuxSet(LPC_IOCON, 1, 9, (IOCON_FUNC1 | IOCON_MODE_INACT |
 										   IOCON_ADMODE_EN));
 
 	Chip_ADC_SetupSequencer( LPC_ADC, ADC_SEQA_IDX,
-			(ADC_SEQ_CTRL_CHANSEL(BOARD_ADC_CH) | ADC_SEQ_CTRL_MODE_EOS ) );
+			(ADC_SEQ_CTRL_CHANSEL(BOARD_ADC_CH) | ADC_SEQ_CTRL_HWTRIG_POLPOS  ) );
 
 	Chip_ADC_EnableSequencer(LPC_ADC, ADC_SEQA_IDX );
+	Chip_ADC_SetSequencerBits(LPC_ADC, ADC_SEQA_IDX, ADC_SEQ_CTRL_START );
 
 
 	uint32_t sample = 0;
@@ -83,6 +88,7 @@ int main(void) {
     while(1) {
 
     	while( !ADC_Done() ) {
+    		//DEBUGSTR("ADC NOT DONE \r\n");
     		i++;
     	}
 
@@ -93,7 +99,7 @@ int main(void) {
 
     	conv = (3.3 / 4095) * sample;
 
-    	sprintf(str, "%.4f\r\n", conv );
+    	sprintf(str, "%.4f V	 %d\r\n ", conv, sample );
     	Board_UARTPutSTR( str );
 
     	Chip_ADC_SetSequencerBits(LPC_ADC, ADC_SEQA_IDX, ADC_SEQ_CTRL_START );
