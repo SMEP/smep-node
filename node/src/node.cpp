@@ -14,12 +14,14 @@
 
 #include <cr_section_macros.h>
 
+#include "adc.h"
+#include "millis.h"
+#include "uart.h"
+#include "WString.h"
+
 #define LPC_UART LPC_USART0
-#define BOARD_ADC_CH 0
 
-// TODO: insert other include files here
 
-// TODO: insert other definitions and declarations here
 
 static void Init_UART_PinMux(void)
 {
@@ -27,15 +29,7 @@ static void Init_UART_PinMux(void)
 	Chip_IOCON_PinMuxSet(LPC_IOCON, 0, 19, (IOCON_FUNC1 | IOCON_MODE_INACT | IOCON_DIGMODE_EN));
 }
 
-
-bool ADC_Done() {
-	uint32_t rawSample = Chip_ADC_GetDataReg(LPC_ADC, 0 );
-
-	return (bool) ADC_DR_DONE(rawSample); // Data valid flag;
-}
-
-int main(void) {
-
+inline void Init() {
     // Read clock settings and update SystemCoreClock variable
     SystemCoreClockUpdate();
 
@@ -45,35 +39,68 @@ int main(void) {
     // Set the LED to the state of "On"
     Board_LED_Set(0, true);
 
+
     Init_UART_PinMux();
+    Board_Debug_Init(); // Init UART0 for Debbugging
 
-    Chip_UART0_Init( LPC_UART );
-    Chip_UART0_SetBaud( LPC_UART, 115200 );
-    Chip_UART0_TXEnable( LPC_UART );
+    Millis_Start();
+    UART_Init( 115200 );
+    ADC_Init();
+}
 
-    Board_UARTPutSTR( "HelloWorld! \n");
+bool ReadResponse(String& resp, const int timeout ) {
+	unsigned long int time = Millis();
+
+	bool success = false;
+
+	UART_IntDisable();
+
+	while( (time + timeout) > Millis() ) {
+		while( UART_Available() ) {
+			resp += (char) UART_Read();
+
+			if( resp.indexOf("OK") ) {
+				success = true;
+				break;
+			} else if( resp.indexOf("FAIL") )
+				break;
+		}
+	}
+
+	UART_IntEnable();
+
+	return success;
+}
 
 
-    Chip_ADC_Init( LPC_ADC, 0 );
+bool SendData( const uint8_t * data, const uint16_t size, const int timeout, String* ret) {
+	bool success;
+	String resp;
 
 
-    Chip_ADC_SetClockRate( LPC_ADC, ADC_MAX_SAMPLE_RATE / 100 ); // Calibrarion requires around 500kHz
-    Chip_ADC_StartCalibration( LPC_ADC );
+	UART_Send( data, size );
 
-    while( ! (Chip_ADC_IsCalibrationDone( LPC_ADC )) ) {}
+	success = ReadResponse(resp, timeout);
 
-    Chip_ADC_SetClockRate( LPC_ADC, ADC_MAX_SAMPLE_RATE );
+	char * t = (char * ) resp.c_str();
+	Board_UARTPutSTR( t );
 
 
 
-	Chip_IOCON_PinMuxSet(LPC_IOCON, 1, 9, (IOCON_FUNC1 | IOCON_MODE_INACT |
-										   IOCON_ADMODE_EN));
+	if( ret != NULL )
+		*ret = resp;
 
-	Chip_ADC_SetupSequencer( LPC_ADC, ADC_SEQA_IDX,
-			(ADC_SEQ_CTRL_CHANSEL(BOARD_ADC_CH) | ADC_SEQ_CTRL_HWTRIG_POLPOS  ) );
 
-	Chip_ADC_EnableSequencer(LPC_ADC, ADC_SEQA_IDX );
-	Chip_ADC_SetSequencerBits(LPC_ADC, ADC_SEQA_IDX, ADC_SEQ_CTRL_START );
+	return success;
+}
+
+int main(void) {
+	Init();
+
+    printf( "HelloWorld! \n");
+
+
+
 
 
 	uint32_t sample = 0;
@@ -87,23 +114,23 @@ int main(void) {
     float conv = 0;
     while(1) {
 
-    	while( !ADC_Done() ) {
-    		//DEBUGSTR("ADC NOT DONE \r\n");
-    		i++;
-    	}
+    	sample = ADC_Read();
 
-
-    	sample = ADC_DR_RESULT( Chip_ADC_GetDataReg( LPC_ADC, 0 ) );
-
-    	Chip_ADC_ClearFlags( LPC_ADC, ADC_FLAGS_SEQA_INT_MASK );
 
     	conv = (3.3 / 4095) * sample;
 
     	sprintf(str, "%.4f V	 %d\r\n ", conv, sample );
     	Board_UARTPutSTR( str );
 
-    	Chip_ADC_SetSequencerBits(LPC_ADC, ADC_SEQA_IDX, ADC_SEQ_CTRL_START );
-    	//for( i = 0; i < limit; i++ ) {}
+    	String cmd = "AT+CWLAP\r\n";
+
+
+    	printf("Sending data..\n");
+    	SendData( (const uint8_t*)cmd.c_str(), cmd.length(), 6000, NULL);
+
+    	Delay_ms( 400 );
+
+
 
     }
     return 0 ;
