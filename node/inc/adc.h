@@ -10,9 +10,14 @@
 
 #include <stdint.h>
 
+typedef struct {
+	uint16_t current;
+	uint16_t voltage;
+} ADC_RESULT;
+
 void ADC_Init();
 bool ADC_Done();
-uint16_t ADC_Read();
+ADC_RESULT ADC_Read();
 
 
 

@@ -14,14 +14,19 @@
 
 #include <cr_section_macros.h>
 
+#include "definitions.h"
+
 #include "adc.h"
 #include "millis.h"
 #include "uart.h"
+#include "dsp.h"
+#include "esp.h"
 #include "WString.h"
+
 
 #define LPC_UART LPC_USART0
 
-
+ESP8266 esp;
 
 static void Init_UART_PinMux(void)
 {
@@ -29,7 +34,16 @@ static void Init_UART_PinMux(void)
 	Chip_IOCON_PinMuxSet(LPC_IOCON, 0, 19, (IOCON_FUNC1 | IOCON_MODE_INACT | IOCON_DIGMODE_EN));
 }
 
-inline void Init() {
+static void InitESP() {
+	Board_UARTPutSTR( "Conectando AP..." );
+	esp.SetMux( true );
+
+	esp.ConnectAP( AP_SSID, AP_PW );
+
+	Board_UARTPutSTR( "AP Conectado!" );
+}
+
+static inline void Init() {
     // Read clock settings and update SystemCoreClock variable
     SystemCoreClockUpdate();
 
@@ -48,56 +62,14 @@ inline void Init() {
     ADC_Init();
 }
 
-bool ReadResponse(String& resp, const int timeout ) {
-	unsigned long int time = Millis();
-
-	bool success = false;
-
-	UART_IntDisable();
-
-	while( (time + timeout) > Millis() ) {
-		while( UART_Available() ) {
-			resp += (char) UART_Read();
-
-			if( resp.indexOf("OK") ) {
-				success = true;
-				break;
-			} else if( resp.indexOf("FAIL") )
-				break;
-		}
-	}
-
-	UART_IntEnable();
-
-	return success;
-}
-
-
-bool SendData( const uint8_t * data, const uint16_t size, const int timeout, String* ret) {
-	bool success;
-	String resp;
-
-
-	UART_Send( data, size );
-
-	success = ReadResponse(resp, timeout);
-
-	char * t = (char * ) resp.c_str();
-	Board_UARTPutSTR( t );
-
-
-
-	if( ret != NULL )
-		*ret = resp;
-
-
-	return success;
-}
 
 int main(void) {
 	Init();
 
     printf( "HelloWorld! \n");
+
+
+    InitESP();
 
 
 
@@ -110,9 +82,15 @@ int main(void) {
 	char str[200];
     volatile static int i = 0 ;
     int limit = 999;
-    // Enter an infinite loop, just incrementing a counter
+
     float conv = 0;
-    while(1) {
+
+
+    StartAquisition();
+
+    while(1) {} // Ooops should not be here
+
+   /* while(1) {
 
     	sample = ADC_Read();
 
@@ -132,6 +110,6 @@ int main(void) {
 
 
 
-    }
+    }*/
     return 0 ;
 }

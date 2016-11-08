@@ -38,18 +38,18 @@ bool ADC_Done() {
 	return (bool) ADC_DR_DONE(rawSample); // Data valid flag;
 }
 
-uint16_t ADC_Read() {
-	uint16_t sample;
+ADC_RESULT ADC_Read() {
+	ADC_RESULT result;
 
 	Chip_ADC_SetSequencerBits( LPC_ADC, ADC_SEQA_IDX, ADC_SEQ_CTRL_START );
 
 	while( !ADC_Done() ) { }
 
-	sample = ADC_DR_RESULT( Chip_ADC_GetDataReg( LPC_ADC, 0 ) );
+	result.current = ADC_DR_RESULT( Chip_ADC_GetDataReg( LPC_ADC, 0 ) );
 
 	Chip_ADC_ClearFlags( LPC_ADC, ADC_FLAGS_SEQA_INT_MASK );
 
-	return sample;
+	return result;
 }
 
 
